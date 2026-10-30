@@ -20,17 +20,25 @@ class LLM:
             self.client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
     def generate(self, system, messages):
-        """messages: list of {"role": "user"|"assistant", "content": str}. Returns text. Retries on 429."""
-        for attempt in range(4):
+        """messages: list of {"role": "user"|"assistant", "content": str}. Returns text. Retries on 429/503."""
+        main_model = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+        for attempt in range(5):
             try:
                 return self._call(system, messages)
             except Exception as e:
                 converted = self._native_tool_call_as_json(e)
                 if converted:
                     return converted
-                # rate limit: back off and retry, otherwise surface the error
-                if attempt < 3 and ("429" in str(e) or "rate" in str(e).lower() or "quota" in str(e).lower()):
-                    time.sleep(2 * 2 ** attempt)
+                msg = str(e).lower()
+                # backup model not available for this key: go back to the main model
+                if self.provider == "gemini" and ("404" in msg or "not_found" in msg) and config.GEMINI_MODEL != main_model:
+                    config.GEMINI_MODEL = main_model
+                    continue
+                retryable = any(k in msg for k in ("429", "503", "500", "unavailable", "overloaded", "high demand", "quota", "resource_exhausted"))
+                if attempt < 4 and retryable:
+                    if self.provider == "gemini" and attempt >= 1:
+                        config.GEMINI_MODEL = "gemini-3.8-flash-lite" if config.GEMINI_MODEL == main_model else main_model
+                    time.sleep(2 * (attempt + 1))
                     continue
                 raise
 
