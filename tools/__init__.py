@@ -11,7 +11,7 @@ class Tool:
 
 
 def build_tools():
-   from tools.calculator import Calculator
+    from tools.calculator import Calculator
     from tools.data_query import ListFiles, ReadFile, SqlQuery
     from tools.web_search import WebSearch
     from tools.soil_trends import SoilTrends
